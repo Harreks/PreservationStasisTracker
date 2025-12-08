@@ -1,3 +1,12 @@
+local version = select(4, GetBuildInfo())
+if version ~= 120000 then
+    print('Preservation Stasis Tracker is designed only for Midnight.')
+    return
+end
+local _, class = UnitClass("player")
+if class ~= "EVOKER" then return end
+
+--Create Display
 local stasisDisplay = CreateFrame("Frame", "PreservationStasisTrackerDisplay", UIParent)
 stasisDisplay:SetSize(120, 40)
 stasisDisplay:SetPoint("CENTER", UIParent, "CENTER")
@@ -40,6 +49,41 @@ stasisDisplay.text:SetText(15)
 
 stasisDisplay:Hide()
 
+-- Dumb Workaround for Secret Empowers
+local empowerCancelTracker = CreateFrame("Frame")
+empowerCancelTracker:SetScript("OnEvent", function()
+    empowerCancelTracker.startedMovingTimestamp = GetTime()
+end)
+empowerCancelTracker:SetPropagateKeyboardInput(true)
+empowerCancelTracker:SetScript("OnKeyDown", function(self, key)
+    if key == "ESCAPE" then
+        empowerCancelTracker.escapePressedTimestamp = GetTime()
+    end
+end)
+
+local function StartedCastingDreamBreath()
+    empowerCancelTracker.currentlyCastingDreamBreath = true
+    empowerCancelTracker:RegisterEvent("PLAYER_STARTED_MOVING")
+    empowerCancelTracker:EnableKeyboard(true)
+end
+
+local function FinishedCastingEmpower()
+    if empowerCancelTracker.currentlyCastingDreamBreath then
+        local timeStamp = GetTime()
+        local empowerWasCanceled = false
+        if empowerCancelTracker.startedMovingTimestamp and math.floor(timeStamp) == math.floor(empowerCancelTracker.startedMovingTimestamp) then
+            empowerWasCanceled = true
+        elseif empowerCancelTracker.escapePressedTimestamp and math.floor(timeStamp) == math.floor(empowerCancelTracker.escapePressedTimestamp) then
+            empowerWasCanceled = true
+        end
+        empowerCancelTracker.currentlyCastingDreamBreath = false
+        empowerCancelTracker:UnregisterAllEvents()
+        empowerCancelTracker:EnableKeyboard(false)
+        return empowerWasCanceled
+    end
+end
+
+-- Spell Casting Logic
 local spellList = {
     [370537] = 'Stasis Store',
     [370564] = 'Stasis Release',
@@ -95,12 +139,12 @@ end
 local function AddSpell(spellId)
     currentState.storedSpells = currentState.storedSpells + 1
     stasisDisplay.icons[currentState.storedSpells]:SetTexture(C_Spell.GetSpellTexture(spellId))
-    print('adding spell on slot ' .. currentState.storedSpells)
     if currentState.storedSpells == 3 then
         FillStasis()
     end
 end
 
+-- Event Tracker Frame
 local castTracker = CreateFrame("Frame")
 castTracker:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 castTracker:RegisterEvent("UNIT_SPELLCAST_EMPOWER_STOP")
@@ -108,18 +152,24 @@ castTracker:SetScript("OnEvent", function(self, event, ...)
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
         local unit, _, spellId = ...
         if not issecretvalue(unit) and not issecretvalue(spellId) and unit == "player" then
-            DevTools_Dump(spellId)
             if not currentState.showing and spellList[spellId] == 'Stasis Store' then
                 StartStasis()
-            else
-                if currentState.storedSpells < 3 and spellList[spellId] then
-                    AddSpell(spellId)
-                elseif spellList[spellId] == 'Stasis Release' then
-                    ReleaseStasis()
+            elseif currentState.showing then
+                if spellList[spellId] == 'Dream Breath' then
+                    StartedCastingDreamBreath()
+                else
+                    if currentState.storedSpells < 3 and spellList[spellId] then
+                        AddSpell(spellId)
+                    elseif spellList[spellId] == 'Stasis Release' then
+                        ReleaseStasis()
+                    end
                 end
             end
         end
     elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
-
+        local empowerWasCanceled = FinishedCastingEmpower()
+        if empowerWasCanceled ~= nil and not empowerWasCanceled then
+            AddSpell(355936)
+        end
     end
 end)
