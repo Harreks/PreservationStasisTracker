@@ -1,0 +1,9 @@
+## Interface: 120000
+## Title: Preservation Stasis Tracker
+## Author: Harrek
+## Version: 1.0.0
+## Notes: Stasis Tracker for Preservation Evokers
+## IconTexture: 4630476
+## Category: Buffs & Debuffs
+
+PreservationStasisTracker.lua
