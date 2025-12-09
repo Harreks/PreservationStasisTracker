@@ -1,5 +1,5 @@
 local version = select(4, GetBuildInfo())
-if version ~= 120000 then
+if version > 120000 then
     print('Preservation Stasis Tracker is designed only for Midnight.')
     return
 end
