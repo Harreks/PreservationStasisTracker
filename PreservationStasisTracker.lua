@@ -10,32 +10,13 @@ end
 local _, class = UnitClass("player")
 if class ~= "EVOKER" then return end
 
-local colorList = {
-    Red = { r = 1, g = 0, b = 0 },
-    Green = { r = 0, g = 1, b = 0 },
-    Blue = { r = 0, g = 0, b = 1 },
-    Yellow = { r = 1, g = 1, b = 0 },
-    Orange = { r = 1, g = 0.5, b = 0 },
-    Purple = { r = 0.5, g = 0, b = 1 },
-    Pink = { r = 1, g = 0, b = 0.5 }
-}
-
 ----------------------------------------[[
 -- Display
 ----------------------------------------]]
 local stasisDisplay = CreateFrame("Frame", "PreservationStasisTrackerDisplay", UIParent)
 stasisDisplay:SetSize(120, 55)
-stasisDisplay:SetPoint("CENTER", UIParent, "CENTER")
-stasisDisplay:SetMovable(true)
+stasisDisplay:SetPoint("CENTER")
 stasisDisplay:SetClampedToScreen(true)
-stasisDisplay:EnableMouse(true)
-stasisDisplay:RegisterForDrag("LeftButton")
-stasisDisplay:SetScript("OnDragStart", function(self)
-    self:StartMoving()
-end)
-stasisDisplay:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-end)
 
 stasisDisplay.icons = {}
 for i = 1, 3 do
@@ -57,6 +38,14 @@ stasisDisplay.bar:SetStatusBarTexture("Interface/TargetingFrame/UI-TargetingFram
 stasisDisplay.bar:SetStatusBarColor(1, 1, 0)
 stasisDisplay.bar:SetMinMaxValues(0, 30)
 stasisDisplay.bar:SetValue(15)
+stasisDisplay.bar.NineSlice.TopLeftCorner:SetDrawLayer("ARTWORK", 7)
+stasisDisplay.bar.NineSlice.TopRightCorner:SetDrawLayer("ARTWORK", 7)
+stasisDisplay.bar.NineSlice.BottomLeftCorner:SetDrawLayer("ARTWORK", 7)
+stasisDisplay.bar.NineSlice.BottomRightCorner:SetDrawLayer("ARTWORK", 7)
+stasisDisplay.bar.NineSlice.TopEdge:SetDrawLayer("ARTWORK", 7)
+stasisDisplay.bar.NineSlice.BottomEdge:SetDrawLayer("ARTWORK", 7)
+stasisDisplay.bar.NineSlice.LeftEdge:SetDrawLayer("ARTWORK", 7)
+stasisDisplay.bar.NineSlice.RightEdge:SetDrawLayer("ARTWORK", 7)
 
 stasisDisplay.text = stasisDisplay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 stasisDisplay.text:SetPoint("CENTER", stasisDisplay.bar, "CENTER")
@@ -92,18 +81,46 @@ end
 
 local function ChangeIconPadding(value, orientation, iconSize)
     if not iconSize then iconSize = 40 end
-    local xPad, yPad, point, rel, barX, barY
+    local xPad, yPad, point, rel, barX, barY, width, height
     if orientation and orientation == 'Vertical' then
         xPad, yPad, point, rel, barX, barY = 0, value, 'BOTTOM', 'TOP', 15, ((iconSize * 3) + value * 2)
+        width, height = iconSize + barX, barY
     else
         xPad, yPad, point, rel, barX, barY = value, 0, 'LEFT', 'RIGHT', ((iconSize * 3) + value * 2), 15
+        width, height = barX, iconSize + barY
     end
     for i = 2, 3 do
         stasisDisplay.icons[i]:ClearAllPoints()
         stasisDisplay.icons[i]:SetPoint(point, stasisDisplay.icons[i - 1], rel, xPad, yPad)
     end
+    stasisDisplay:SetSize(width, height)
     stasisDisplay.bar:SetSize(barX, barY)
     PSTDB['iconPadding'] = value
+end
+
+local function SetGrowDirection(direction, layout)
+    local point, rel, padX, padY, barX, barY, width, height
+    if direction == "Horizontal" then
+        point, rel, padX, padY, barX, barY = "LEFT", "RIGHT", PSTDB[layout].iconPadding, 0, ((PSTDB[layout].iconSize * 3) + PSTDB[layout].iconPadding * 2), 15
+        width, height = barX, PSTDB[layout].iconSize + barY
+        stasisDisplay:SetSize(PSTDB[layout].iconSize * 3, PSTDB[layout].iconSize + 15)
+        stasisDisplay.bar:ClearAllPoints()
+        stasisDisplay.bar:SetPoint("TOPLEFT", stasisDisplay, "TOPLEFT")
+        stasisDisplay.bar:SetOrientation('HORIZONTAL')
+    elseif direction == "Vertical" then
+        point, rel, padX, padY, barX, barY = "BOTTOM", "TOP", 0, PSTDB[layout].iconPadding, 15, ((PSTDB[layout].iconSize * 3) + PSTDB[layout].iconPadding * 2)
+        width, height = PSTDB[layout].iconSize + barX, barY
+        stasisDisplay:SetSize(PSTDB[layout].iconSize + 15, PSTDB[layout].iconSize * 3)
+        stasisDisplay.bar:ClearAllPoints()
+        stasisDisplay.bar:SetPoint("BOTTOMRIGHT", stasisDisplay, "BOTTOMRIGHT")
+        stasisDisplay.bar:SetOrientation('VERTICAL')
+    end
+    stasisDisplay:SetSize(width, height)
+    stasisDisplay.bar:SetSize(barX, barY)
+    for i = 2, 3 do
+        stasisDisplay.icons[i]:ClearAllPoints()
+        stasisDisplay.icons[i]:SetPoint(point, stasisDisplay.icons[i - 1], rel, padX, padY)
+    end
 end
 
 stasisDisplay:Hide()
@@ -116,6 +133,7 @@ local spellList = {
     [370537] = 'Stasis Store',
     [370564] = 'Stasis Release',
     [361509] = 'Living Flame',
+    [364343] = 'Echo',
     [360995] = 'Verdant Embrace',
     [366155] = 'Reversion',
     [1256581] = 'Merithras Blessing',
@@ -171,6 +189,11 @@ local function AddSpell(spellId)
     end
 end
 
+-- This function is intentionally global, it is meant to be called from a macro to manually cancel the Stasis
+function CancelAuraStasis()
+    ReleaseStasis()
+end
+
 -- Event Tracker Frame
 local castTracker = CreateFrame("Frame")
 castTracker:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
@@ -201,184 +224,112 @@ end)
 -- Options
 ----------------------------------------]]
 
---Parent Frame
-local optionsFrame = CreateFrame("Frame", nil, UIParent, "BasicFrameTemplateWithInset")
-optionsFrame:SetPoint("CENTER")
-optionsFrame:SetSize(300, 200)
-optionsFrame:SetMovable(true)
-optionsFrame:SetClampedToScreen(true)
-optionsFrame:EnableMouse(true)
-optionsFrame:RegisterForDrag("LeftButton")
-optionsFrame:SetScript("OnDragStart", function(self)
-    self:StartMoving()
-end)
-optionsFrame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-end)
-optionsFrame:SetScript("OnShow", function()
-    ShowExample()
-end)
-optionsFrame:SetScript("OnHide", function()
-    stasisDisplay:Hide()
-end)
-optionsFrame:Hide()
-
---Title
-optionsFrame.title = optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-optionsFrame.title:SetPoint("TOPLEFT", optionsFrame, "TOPLEFT", 5, -3)
-optionsFrame.title:SetScale(1.3)
-optionsFrame.title:SetText('|cnNORMAL_FONT_COLOR:Preservation Stasis Tracker|r')
-
---Icon size
-optionsFrame.iconSize = CreateFrame("Slider", nil, optionsFrame, "UISliderTemplateWithLabels")
-optionsFrame.iconSize:SetPoint("TOP", optionsFrame, "TOP", 0, -45)
-optionsFrame.iconSize:SetSize(200, 20)
-optionsFrame.iconSize:SetMinMaxValues(30, 60)
-optionsFrame.iconSize:SetValue(40)
-optionsFrame.iconSize:SetValueStep(1)
-optionsFrame.iconSize:SetObeyStepOnDrag(true)
-optionsFrame.iconSize.Text:SetText("Icon Size")
-optionsFrame.iconSize.Low:SetText("30")
-optionsFrame.iconSize.High:SetText("60")
-
---Grow direction
-optionsFrame.growDirectionContainer = CreateFrame("Frame", nil, optionsFrame)
-optionsFrame.growDirectionContainer:SetPoint("TOP", optionsFrame.iconSize, "BOTTOM", 0, -15)
-optionsFrame.growDirectionContainer:SetSize(210, 20)
-optionsFrame.growDirectionTitle = optionsFrame.growDirectionContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-optionsFrame.growDirectionTitle:SetPoint("LEFT", optionsFrame.growDirectionContainer, "LEFT")
-optionsFrame.growDirectionTitle:SetText("Grow Direction")
-optionsFrame.growDirection = CreateFrame("Frame", "PSTOptionsGrowDirectionDropdown", optionsFrame, "UIDropDownMenuTemplate")
-optionsFrame.growDirection:SetPoint("RIGHT", optionsFrame.growDirectionContainer, "RIGHT", 20, -3)
-UIDropDownMenu_SetWidth(optionsFrame.growDirection, 70)
-
---Icon padding
-optionsFrame.iconPadding = CreateFrame("Slider", nil, optionsFrame, "UISliderTemplateWithLabels")
-optionsFrame.iconPadding:SetPoint("TOP", optionsFrame.growDirectionContainer, "BOTTOM", 0, -20)
-optionsFrame.iconPadding:SetSize(200, 20)
-optionsFrame.iconPadding:SetMinMaxValues(-5, 5)
-optionsFrame.iconPadding:SetValue(0)
-optionsFrame.iconPadding:SetValueStep(1)
-optionsFrame.iconPadding:SetObeyStepOnDrag(true)
-optionsFrame.iconPadding.Text:SetText("Icon Padding")
-optionsFrame.iconPadding.Low:SetText("-5")
-optionsFrame.iconPadding.High:SetText("5")
-
---Bar Color
-optionsFrame.barColorContainer = CreateFrame("Frame", nil, optionsFrame)
-optionsFrame.barColorContainer:SetPoint("TOP", optionsFrame.iconPadding, "BOTTOM", 0, -15)
-optionsFrame.barColorContainer:SetSize(210, 20)
-optionsFrame.barColorTitle = optionsFrame.barColorContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-optionsFrame.barColorTitle:SetPoint("LEFT", optionsFrame.barColorContainer, "LEFT")
-optionsFrame.barColorTitle:SetText("Bar Color")
-optionsFrame.barColor = CreateFrame("Frame", "PSTOptionsBarColorDropdown", optionsFrame, "UIDropDownMenuTemplate")
-optionsFrame.barColor:SetPoint("RIGHT", optionsFrame.barColorContainer, "RIGHT", 20, -3)
-UIDropDownMenu_SetWidth(optionsFrame.barColor, 70)
-
---Setup saved options
+local optionsFrame = CreateFrame('Frame')
 optionsFrame:RegisterEvent("PLAYER_LOGIN")
 optionsFrame:SetScript("OnEvent", function()
     PSTDB = PSTDB or {}
 
-    if PSTDB['iconSize'] then
-        ChangeIconSize(PSTDB['iconSize'], PSTDB['growDirection'], PSTDB['iconPadding'])
-        optionsFrame.iconSize:SetValue(PSTDB['iconSize'])
+    local defaultData = {
+        point = 'CENTER',
+        x = 0,
+        y = 0,
+        iconSize = 40,
+        growDirection = 'Horizontal',
+        iconPadding = 0,
+        color = { r = 1, g = 1, b = 0}
+    }
+
+    local function displayPositionChanged(frame, layout, point, x, y)
+        PSTDB[layout].point = point
+        PSTDB[layout].x = x
+        PSTDB[layout].y = y
     end
-    optionsFrame.iconSize:SetScript("OnValueChanged", function(_, value)
-        ChangeIconSize(value, PSTDB['growDirection'], PSTDB['iconPadding'])
+
+    local LEM = LibStub('LibEditMode')
+
+    LEM:RegisterCallback('enter', function()
+        ShowExample()
     end)
 
-    if PSTDB['iconPadding'] then
-        ChangeIconPadding(PSTDB['iconPadding'], PSTDB['growDirection'], PSTDB['iconSize'])
-        optionsFrame.iconPadding:SetValue(PSTDB['iconPadding'])
-    end
-    optionsFrame.iconPadding:SetScript("OnValueChanged", function(_, value)
-        ChangeIconPadding(value, PSTDB['growDirection'], PSTDB['iconSize'])
+    LEM:RegisterCallback('exit', function()
+        stasisDisplay:Hide()
     end)
 
-    UIDropDownMenu_Initialize(optionsFrame.growDirection, function(self)
-        local info = UIDropDownMenu_CreateInfo()
-        info.func = function(_, direction)
-            local point, rel, padX, padY, barX, barY
-            if direction == "Horizontal" then
-                point, rel, padX, padY, barX, barY = "LEFT", "RIGHT", PSTDB['iconPadding'], 0, ((PSTDB['iconSize'] * 3) + PSTDB['iconPadding'] * 2), 15
-                stasisDisplay:SetSize(PSTDB['iconSize'] * 3, PSTDB['iconSize'] + 15)
-                stasisDisplay.bar:ClearAllPoints()
-                stasisDisplay.bar:SetPoint("TOPLEFT", stasisDisplay, "TOPLEFT")
-                stasisDisplay.bar:SetOrientation('HORIZONTAL')
-            elseif direction == "Vertical" then
-                point, rel, padX, padY, barX, barY = "BOTTOM", "TOP", 0, PSTDB['iconPadding'], 15, ((PSTDB['iconSize'] * 3) + PSTDB['iconPadding'] * 2)
-                stasisDisplay:SetSize(PSTDB['iconSize'] + 15, PSTDB['iconSize'] * 3)
-                stasisDisplay.bar:ClearAllPoints()
-                stasisDisplay.bar:SetPoint("BOTTOMRIGHT", stasisDisplay, "BOTTOMRIGHT")
-                stasisDisplay.bar:SetOrientation('VERTICAL')
-            end
-            stasisDisplay.bar:SetSize(barX, barY)
-            for i = 2, 3 do
-                stasisDisplay.icons[i]:ClearAllPoints()
-                stasisDisplay.icons[i]:SetPoint(point, stasisDisplay.icons[i - 1], rel, padX, padY)
-            end
-            UIDropDownMenu_SetText(self, direction)
-            PSTDB['growDirection'] = direction
+    LEM:RegisterCallback('layout', function(layout)
+        if not PSTDB[layout] then
+            PSTDB[layout] = CopyTable(defaultData)
         end
-        local options = {
-            Horizontal = false,
-            Vertical = false
+        stasisDisplay:ClearAllPoints()
+        stasisDisplay:SetPoint(PSTDB[layout].point, PSTDB[layout].x, PSTDB[layout].y)
+        stasisDisplay.bar:SetStatusBarColor(PSTDB[layout].color.r, PSTDB[layout].color.g, PSTDB[layout].color.b)
+        ChangeIconSize(PSTDB[layout].iconSize, PSTDB[layout].growDirection, PSTDB[layout].iconPadding)
+        SetGrowDirection(PSTDB[layout].growDirection, layout)
+        ChangeIconPadding(PSTDB[layout].iconPadding, PSTDB[layout].growDirection, PSTDB[layout].iconSize)
+    end)
+
+    LEM:AddFrame(stasisDisplay, displayPositionChanged, defaultData)
+
+    LEM:AddFrameSettings(stasisDisplay, {
+        {
+            name = 'Icon Size',
+            kind = LEM.SettingType.Slider,
+            default = defaultData.iconSize,
+            get = function(layout)
+                return PSTDB[layout].iconSize
+            end,
+            set = function(layout, value)
+                PSTDB[layout].iconSize = value
+                ChangeIconSize(value, PSTDB[layout].growDirection, PSTDB[layout].iconPadding)
+            end,
+            minValue = 30,
+            maxValue = 60,
+            valueStep = 1
+        },
+        {
+            name = 'Icon Padding',
+            kind = LEM.SettingType.Slider,
+            default = defaultData.iconPadding,
+            get = function(layout)
+                return PSTDB[layout].iconPadding
+            end,
+            set = function(layout, value)
+                PSTDB[layout].iconPadding = value
+                ChangeIconPadding(value, PSTDB[layout].growDirection, PSTDB[layout].iconSize)
+            end,
+            minValue = -5,
+            maxValue = 5,
+            valueStep = 1
+        },
+        {
+            name = 'Grow Direction',
+            kind = LEM.SettingType.Dropdown,
+            default = defaultData.growDirection,
+            get = function(layout)
+                return PSTDB[layout].growDirection
+            end,
+            set = function(layout, value)
+                PSTDB[layout].growDirection = value
+                SetGrowDirection(value, layout)
+            end,
+            values = {
+                { text = 'Horizontal' },
+                { text = 'Vertical' }
+            }
+        },
+        {
+            name = 'Bar Color',
+            kind = LEM.SettingType.ColorPicker,
+            default = CreateColor(defaultData.color.r, defaultData.color.g, defaultData.color.b),
+            get = function(layout)
+                return CreateColor(PSTDB[layout].color.r, PSTDB[layout].color.g, PSTDB[layout].color.b)
+            end,
+            set = function(layout, color)
+                local colorDataR, colorDataG, colorDataB = color:GetRGB()
+                PSTDB[layout].color = { r = colorDataR, g = colorDataG, b = colorDataB }
+                stasisDisplay.bar:SetStatusBarColor(colorDataR, colorDataG, colorDataB)
+            end
         }
-        if PSTDB['growDirection'] then
-            options[PSTDB['growDirection']] = true
-            UIDropDownMenu_SetText(self, PSTDB['growDirection'])
-            if PSTDB['growDirection'] == 'Vertical' then
-                for i = 2, 3 do
-                    stasisDisplay.icons[i]:ClearAllPoints()
-                    stasisDisplay.icons[i]:SetPoint('BOTTOM', stasisDisplay.icons[i - 1], 'TOP', 0, PSTDB['iconPadding'])
-                end
-                stasisDisplay:SetSize(PSTDB['iconSize'] + 15, PSTDB['iconSize'] * 3)
-                stasisDisplay.bar:SetSize(15, ((PSTDB['iconSize'] * 3) + PSTDB['iconPadding'] * 2))
-                stasisDisplay.bar:ClearAllPoints()
-                stasisDisplay.bar:SetPoint("BOTTOMRIGHT", stasisDisplay, "BOTTOMRIGHT")
-                stasisDisplay.bar:SetOrientation('VERTICAL')
-            end
-        else
-            options.Horizontal = true
-            UIDropDownMenu_SetText(self, 'Horizontal')
-        end
-        for direction, selected in pairs(options) do
-            info.text, info.checked, info.arg1 = direction, selected, direction
-            UIDropDownMenu_AddButton(info)
-        end
-    end)
-
-    UIDropDownMenu_Initialize(optionsFrame.barColor, function(self)
-        local info = UIDropDownMenu_CreateInfo()
-        info.func = function(_, color)
-            local selectedColor = colorList[color]
-            stasisDisplay.bar:SetStatusBarColor(selectedColor.r, selectedColor.g, selectedColor.b)
-            UIDropDownMenu_SetText(self, color)
-            PSTDB['barColor'] = color
-        end
-        local options = {}
-        for key, _ in pairs(colorList) do
-            options[key] = false
-        end
-        if PSTDB['barColor'] then
-            options[PSTDB['barColor']] = true
-            local selectedColor = colorList[PSTDB['barColor']]
-            stasisDisplay.bar:SetStatusBarColor(selectedColor.r, selectedColor.g, selectedColor.b)
-            UIDropDownMenu_SetText(self, PSTDB['barColor'])
-        else
-            options.Yellow = true
-            UIDropDownMenu_SetText(self, 'Yellow')
-        end
-        for color, selected in pairs(options) do
-            info.text, info.checked, info.arg1 = color, selected, color
-            UIDropDownMenu_AddButton(info)
-        end
-    end)
+    })
 
 end)
 
-SLASH_STASISTRACKER1 = "/pst"
-SlashCmdList.STASISTRACKER = function()
-    optionsFrame:Show()
-end
