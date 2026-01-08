@@ -143,11 +143,18 @@ local spellList = {
     [373861] = 'Temporal Anomaly'
 }
 
+local empowers = {
+    TTS = 370553,
+    DreamBreath = 355936,
+    FireBreath = 357208
+}
+
 local currentState = {
     showing = false,
     storedSpells = 0,
     fillTime = nil,
-    ticker = nil
+    ticker = nil,
+    tts = false
 }
 
 local function StartStasis()
@@ -205,8 +212,19 @@ castTracker:SetScript("OnEvent", function(self, event, ...)
             if not currentState.showing and spellList[spellId] == 'Stasis Store' then
                 StartStasis()
             elseif currentState.showing then
-                if currentState.storedSpells < 3 and spellList[spellId] then
-                    AddSpell(spellId)
+                if currentState.storedSpells < 3 then
+                    if spellList[spellId] then
+                        AddSpell(spellId)
+                    elseif spellId == empowers.TTS and not currentState.tts then
+                        currentState.tts = true
+                    elseif currentState.tts then
+                        if spellId == empowers.DreamBreath then
+                            currentState.tts = false
+                            AddSpell(spellId)
+                        elseif spellId == empowers.FireBreath then
+                            currentState.tts = false
+                        end
+                    end
                 elseif spellList[spellId] == 'Stasis Release' then
                     ReleaseStasis()
                 end
@@ -214,8 +232,8 @@ castTracker:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
         local _, _, spellId, success = ...
-        if spellId == 355936 and success then
-            AddSpell(355936)
+        if spellId == empowers.DreamBreath and success then
+            AddSpell(spellId)
         end
     end
 end)
