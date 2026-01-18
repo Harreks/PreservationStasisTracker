@@ -30,27 +30,23 @@ for i = 1, 3 do
     end
 end
 
-stasisDisplay.bar = CreateFrame("StatusBar", nil, stasisDisplay, "TooltipBorderedFrameTemplate")
+stasisDisplay.bar = CreateFrame("StatusBar", nil, stasisDisplay)
 stasisDisplay.bar:SetFrameStrata("LOW")
 stasisDisplay.bar:SetSize(120, 15)
 stasisDisplay.bar:SetPoint("TOPLEFT", stasisDisplay, "TOPLEFT")
-stasisDisplay.bar:SetStatusBarTexture("Interface/TargetingFrame/UI-TargetingFrame-LevelBackground")
-stasisDisplay.bar:SetStatusBarColor(1, 1, 0)
+stasisDisplay.bar:SetStatusBarTexture("Interface/Buttons/WHITE8x8")
+stasisDisplay.bar:SetStatusBarColor(0.2, 0.5, 0.4)
 stasisDisplay.bar:SetMinMaxValues(0, 30)
 stasisDisplay.bar:SetValue(15)
-stasisDisplay.bar.NineSlice.TopLeftCorner:SetDrawLayer("ARTWORK", 7)
-stasisDisplay.bar.NineSlice.TopRightCorner:SetDrawLayer("ARTWORK", 7)
-stasisDisplay.bar.NineSlice.BottomLeftCorner:SetDrawLayer("ARTWORK", 7)
-stasisDisplay.bar.NineSlice.BottomRightCorner:SetDrawLayer("ARTWORK", 7)
-stasisDisplay.bar.NineSlice.TopEdge:SetDrawLayer("ARTWORK", 7)
-stasisDisplay.bar.NineSlice.BottomEdge:SetDrawLayer("ARTWORK", 7)
-stasisDisplay.bar.NineSlice.LeftEdge:SetDrawLayer("ARTWORK", 7)
-stasisDisplay.bar.NineSlice.RightEdge:SetDrawLayer("ARTWORK", 7)
+
+stasisDisplay.barBackground = stasisDisplay.bar:CreateTexture(nil, 'BACKGROUND')
+stasisDisplay.barBackground:SetAllPoints(stasisDisplay.bar)
+stasisDisplay.barBackground:SetColorTexture(0, 0, 0, 1)
 
 stasisDisplay.text = stasisDisplay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 stasisDisplay.text:SetPoint("CENTER", stasisDisplay.bar, "CENTER")
 stasisDisplay.text:SetShadowColor(0, 0, 0, 1)
-stasisDisplay.text:SetShadowOffset(-2, -2)
+stasisDisplay.text:SetShadowOffset(-1, -1)
 stasisDisplay.text:SetScale(1.2)
 stasisDisplay.text:SetText('15')
 
@@ -190,7 +186,9 @@ end
 
 local function AddSpell(spellId)
     currentState.storedSpells = currentState.storedSpells + 1
-    stasisDisplay.icons[currentState.storedSpells]:SetTexture(C_Spell.GetSpellTexture(spellId))
+    if stasisDisplay.icons[currentState.storedSpells] then
+        stasisDisplay.icons[currentState.storedSpells]:SetTexture(C_Spell.GetSpellTexture(spellId))
+    end
     if currentState.storedSpells == 3 then
         FillStasis()
     end
@@ -232,7 +230,7 @@ castTracker:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
         local _, _, spellId, success = ...
-        if spellId == empowers.DreamBreath and success then
+        if not issecretvalue(spellId) and spellId == empowers.DreamBreath and success then
             AddSpell(spellId)
         end
     end
