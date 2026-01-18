@@ -252,7 +252,7 @@ optionsFrame:SetScript("OnEvent", function()
         iconSize = 40,
         growDirection = 'Horizontal',
         iconPadding = 0,
-        color = { r = 1, g = 1, b = 0}
+        color = { r = 0.2, g = 0.5, b = 0.4}
     }
 
     local function displayPositionChanged(frame, layout, point, x, y)
