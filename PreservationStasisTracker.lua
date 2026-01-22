@@ -141,8 +141,14 @@ local spellList = {
 
 local empowers = {
     TTS = 370553,
-    DreamBreath = 355936,
-    FireBreath = 357208
+    DreamBreath = {
+        355936,
+        382614
+    },
+    FireBreath = {
+        357208,
+        382266
+    }
 }
 
 local currentState = {
@@ -216,10 +222,10 @@ castTracker:SetScript("OnEvent", function(self, event, ...)
                     elseif spellId == empowers.TTS and not currentState.tts then
                         currentState.tts = true
                     elseif currentState.tts then
-                        if spellId == empowers.DreamBreath then
+                        if spellId == empowers.DreamBreath[1] or spellId == empowers.DreamBreath[2] then
                             currentState.tts = false
                             AddSpell(spellId)
-                        elseif spellId == empowers.FireBreath then
+                        elseif spellId == empowers.FireBreath[1] or spellId == empowers.FireBreath[2] then
                             currentState.tts = false
                         end
                     end
@@ -230,7 +236,7 @@ castTracker:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
         local _, _, spellId, success = ...
-        if not issecretvalue(spellId) and spellId == empowers.DreamBreath and success then
+        if not issecretvalue(spellId) and success and spellId == empowers.DreamBreath[1] or spellId == empowers.DreamBreath[2] then
             AddSpell(spellId)
         end
     end
@@ -297,7 +303,7 @@ optionsFrame:SetScript("OnEvent", function()
                 PSTDB[layout].iconSize = value
                 ChangeIconSize(value, PSTDB[layout].growDirection, PSTDB[layout].iconPadding)
             end,
-            minValue = 30,
+            minValue = 20,
             maxValue = 60,
             valueStep = 1
         },
